@@ -1,0 +1,30 @@
+{
+  "name": "lab-booking-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "高校实验室设备预约与共享管理系统 —— 毕业设计实现",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node scripts/reseed.js",
+    "test": "node test/run.js",
+    "test:unit": "node test/run.js interval,conflict-rules",
+    "test:flow": "node test/run.js booking",
+    "smoke": "node scripts/smoke.js",
+    "check:seed": "node scripts/check-seed.js",
+    "check:frontend": "node scripts/verify-frontend.js",
+    "reset": "node scripts/reseed.js"
+  },
+  "keywords": [
+    "实验室",
+    "设备预约",
+    "冲突检测",
+    "毕业设计"
+  ],
+  "license": "MIT"
+}

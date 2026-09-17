@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>高校实验室设备预约与共享管理系统</title>
+<meta name="description" content="实验室设备在线预约、审批、签到、候补补位与利用率统计分析平台" />
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6fed'/%3E%3Ctext x='16' y='22' font-size='17' text-anchor='middle' fill='white' font-family='sans-serif'%3E%E5%AE%9E%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <!-- 登录页 -->
+  <div id="login-view" class="login-view" hidden>
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="login-logo">实</div>
+        <div>
+          <h1 id="login-title">高校实验室设备预约与共享管理系统</h1>
+          <p class="muted">Laboratory Equipment Booking &amp; Sharing Platform</p>
+        </div>
+      </div>
+      <div class="tabs" id="login-tabs">
+        <button class="tab active" data-tab="login">登录</button>
+        <button class="tab" data-tab="register">学生注册</button>
+      </div>
+      <form id="login-form" class="login-form">
+        <label>用户名<input name="username" autocomplete="username" placeholder="请输入用户名" required /></label>
+        <label>密码<input name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required /></label>
+        <button class="btn btn-primary btn-block" type="submit">登录</button>
+        <p class="form-error" id="login-error" hidden></p>
+      </form>
+      <form id="register-form" class="login-form" hidden>
+        <div class="grid-2">
+          <label>用户名<input name="username" placeholder="字母开头，3-30 位" required /></label>
+          <label>姓名<input name="name" placeholder="真实姓名" required /></label>
+          <label>院系<input name="department" placeholder="如：电子信息学院" /></label>
+          <label>学号<input name="studentNo" placeholder="如：2021030101" /></label>
+          <label>邮箱<input name="email" type="email" placeholder="name@example.edu.cn" /></label>
+          <label>手机号<input name="phone" placeholder="11 位手机号" /></label>
+        </div>
+        <label>密码<input name="password" type="password" placeholder="至少 6 位" required /></label>
+        <button class="btn btn-primary btn-block" type="submit">注册并登录</button>
+        <p class="form-error" id="register-error" hidden></p>
+      </form>
+      <div class="login-demo" id="login-demo"></div>
+    </div>
+  </div>
+
+  <!-- 主应用 -->
+  <div id="app" class="app" hidden>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">实</div>
+        <div class="brand-text">
+          <strong id="brand-name">实验室预约系统</strong>
+          <span class="muted" id="brand-sub">设备共享管理平台</span>
+        </div>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div class="sidebar-foot">
+        <div class="credit-box" id="credit-box"></div>
+        <button class="btn btn-ghost btn-block" id="logout-btn">退出登录</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn only-mobile" id="menu-toggle" aria-label="菜单">☰</button>
+        <div class="topbar-title" id="page-title">工作台</div>
+        <div class="topbar-actions">
+          <div class="clock" id="clock"></div>
+          <button class="icon-btn" id="notify-btn" title="通知中心">
+            🔔<span class="badge" id="notify-badge" hidden>0</span>
+          </button>
+          <div class="user-chip" id="user-chip"></div>
+        </div>
+      </header>
+      <div id="announcement" class="announcement" hidden></div>
+      <section class="content" id="view"></section>
+    </main>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root"></div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

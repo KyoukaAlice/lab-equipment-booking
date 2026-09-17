@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>高校实验室设备预约与共享管理系统 · 项目介绍</title>
+<meta name="description" content="面向高校实验室的设备预约与共享管理系统：R01~R12 冲突规则引擎、并发唯一性、候补自动补位、信用约束与利用率统计。Node.js + SQLite 零第三方依赖实现。">
+<meta name="theme-color" content="#0d2a42">
+<meta property="og:type" content="website">
+<meta property="og:title" content="高校实验室设备预约与共享管理系统">
+<meta property="og:description" content="把「能不能约」拆成 12 条可解释规则，用区间代数 + 事务内二次校验解决预约冲突与并发抢单。">
+<meta property="og:image" content="images/admin-overview.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6fed'/%3E%3Ctext x='16' y='22' font-size='16' text-anchor='middle' fill='white' font-family='sans-serif'%3E%E5%AE%9E%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f6f8fb;
+    --panel: #ffffff;
+    --ink: #101828;
+    --ink-2: #475467;
+    --ink-3: #98a2b3;
+    --line: #e4e7ec;
+    --brand: #2f6fed;
+    --brand-dark: #1f52bd;
+    --brand-soft: #eaf0ff;
+    --ok: #16a34a;
+    --ok-soft: #e8f8ee;
+    --warn: #d97706;
+    --warn-soft: #fdf2e3;
+    --danger: #dc2626;
+    --purple: #7c3aed;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06);
+    --shadow-lg: 0 18px 50px rgba(16,24,40,.18);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.75 "Microsoft YaHei", -apple-system, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--brand); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: #eef1f5; border-radius: 5px; padding: 1.5px 6px;
+    font-family: Consolas, "SFMono-Regular", monospace; font-size: 13px;
+  }
+  pre {
+    background: #0f1a33; color: #d7e3f4; border-radius: 10px; padding: 16px 18px;
+    overflow-x: auto; font-size: 13px; line-height: 1.7; margin: 0;
+    font-family: Consolas, "SFMono-Regular", monospace;
+  }
+  pre .c { color: #7f9cc0; }
+  pre .k { color: #7dd3fc; }
+  pre .s { color: #86efac; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 22px; }
+  h2 {
+    font-size: 25px; margin: 0 0 6px; letter-spacing: .2px;
+  }
+  h2 .num {
+    display: inline-block; min-width: 30px; height: 30px; line-height: 30px; text-align: center;
+    background: var(--brand-soft); color: var(--brand-dark); border-radius: 9px;
+    font-size: 15px; margin-right: 10px; vertical-align: 2px; font-weight: 700;
+  }
+  h3 { font-size: 17px; margin: 0 0 8px; }
+  .lead { color: var(--ink-2); margin: 0 0 22px; }
+  section { padding: 54px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: none; }
+
+  /* ------------------------------ 顶部 ------------------------------ */
+  header {
+    background:
+      radial-gradient(1100px 460px at 12% -20%, rgba(47,111,237,.42), transparent 62%),
+      radial-gradient(900px 420px at 100% 0%, rgba(124,58,237,.32), transparent 58%),
+      linear-gradient(160deg, #0b2137 0%, #10294a 55%, #0d2a42 100%);
+    color: #e8f1fb; padding: 62px 0 54px;
+  }
+  header .eyebrow {
+    display: inline-block; font-size: 12.5px; letter-spacing: .12em;
+    color: #9fc3e8; border: 1px solid rgba(159,195,232,.4);
+    padding: 4px 12px; border-radius: 99px; margin-bottom: 18px;
+  }
+  header h1 { font-size: 38px; line-height: 1.25; margin: 0 0 12px; letter-spacing: .5px; }
+  header .sub { font-size: 16px; color: #b9d2ea; max-width: 780px; margin: 0 0 24px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 26px; }
+  .badge {
+    font-size: 13px; padding: 6px 13px; border-radius: 99px;
+    background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.18); color: #dbe9f8;
+  }
+  .badge.ok { background: rgba(22,163,74,.20); border-color: rgba(134,239,172,.42); color: #c9f5d8; }
+  .badge b { color: #fff; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 20px; border-radius: 10px; font-size: 14.5px; font-weight: 600;
+    border: 1px solid transparent; cursor: pointer;
+  }
+  .btn-primary { background: #f5b942; color: #33240a; }
+  .btn-primary:hover { background: #ffca5c; text-decoration: none; }
+  .btn-ghost { border-color: rgba(255,255,255,.32); color: #e8f1fb; }
+  .btn-ghost:hover { background: rgba(255,255,255,.10); text-decoration: none; }
+  .hero-shot {
+    margin-top: 34px; border-radius: 12px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.18); box-shadow: 0 24px 60px rgba(0,0,0,.42);
+    background: #0b1626;
+  }
+  .hero-shot img { display: block; width: 100%; }
+  .hero-shot figcaption {
+    font-size: 12.5px; color: #9fc3e8; padding: 9px 14px; border-top: 1px solid rgba(255,255,255,.12);
+  }
+
+  /* ------------------------------ 卡片 ------------------------------ */
+  .grid { display: grid; gap: 16px; }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); }
+  .g4 { grid-template-columns: repeat(auto-fit, minmax(198px, 1fr)); }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px; box-shadow: var(--shadow);
+  }
+  .card h3 { display: flex; align-items: center; gap: 9px; }
+  .card .ico {
+    width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-items: center;
+    background: var(--brand-soft); color: var(--brand-dark); font-size: 15px;
+  }
+  .card p { margin: 0; color: var(--ink-2); font-size: 14px; }
+  .card ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-size: 14px; }
+  .card li { margin: 3px 0; }
+
+  /* 分层职责：左侧层名固定宽度，右侧说明自动换行。
+     注意：网格项必须是「一个元素」，若直接写 <b>名</b> 纯文本 <span>说明</span>，
+     浏览器会把裸文本也包成一个匿名网格项，三个子项会各占一格导致错位，
+     因此左侧统一包在 <i class="ly"> 里。 */
+  ul.layers { list-style: none; padding-left: 0; margin: 0; }
+  ul.layers li {
+    display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 2px 12px;
+    padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 13px;
+  }
+  ul.layers li:last-child { border-bottom: none; }
+  ul.layers .ly {
+    font-style: normal; font-family: Consolas, "Microsoft YaHei", monospace; font-size: 12.5px;
+    color: var(--brand-dark); font-weight: 700; white-space: nowrap;
+  }
+  ul.layers li > span { color: var(--ink-2); font-size: 12.5px; }
+
+  .stat {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--brand);
+    border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow);
+  }
+  .stat .v { font-size: 26px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 12.5px; color: var(--ink-3); }
+  .stat.ok { border-left-color: var(--ok); }
+  .stat.purple { border-left-color: var(--purple); }
+  .stat.warn { border-left-color: var(--warn); }
+
+  /* ------------------------------ 规则表 ------------------------------ */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--panel); }
+  .table-wrap { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  th, td { padding: 11px 14px; text-align: left; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
+  th { background: #fafbfc; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  .rid {
+    display: inline-block; min-width: 40px; text-align: center; font-weight: 700;
+    background: var(--brand-soft); color: var(--brand-dark); border-radius: 6px;
+    padding: 1px 7px; font-size: 12.5px;
+  }
+  .rid.core { background: #fdf2e3; color: #b45309; }
+
+  /* ------------------------------ 图库 ------------------------------ */
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tab {
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink-2);
+    padding: 8px 15px; border-radius: 99px; cursor: pointer; font: inherit; font-size: 14px;
+  }
+  .tab:hover { border-color: var(--brand); color: var(--brand-dark); }
+  .tab.active { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+  /* 图库：每行 2~3 列。
+     列宽不能太小，否则图注几乎每条都要省略（实测 268px 卡宽时 14/15 条被截断）；
+     这里用 minmax(400px, 1fr) 让 1440px 视口排 3 列、1180px 排 2 列，说明文字基本能整行显示。
+     图片统一为固定高度的顶部裁切视窗，保证所有卡片等高、两列严格对齐；
+     点击图片可放大查看完整原图与完整说明。 */
+  .shots { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); align-items: start; }
+  .shot {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    overflow: hidden; box-shadow: var(--shadow); cursor: zoom-in; transition: transform .16s, box-shadow .16s;
+  }
+  .shot:hover { transform: translateY(-3px); box-shadow: 0 16px 40px rgba(16,24,40,.14); }
+  .shot img {
+    display: block; width: 100%; height: 230px; object-fit: cover; object-position: top center;
+    border-bottom: 1px solid var(--line); background: #eef2f7;
+  }
+  .shot figcaption { padding: 11px 14px 13px; font-size: 13.5px; color: var(--ink-2); }
+  .shot figcaption b { color: var(--ink); margin-bottom: 2px; font-size: 14px; }
+  /* 标题与说明各占一行：超出时以省略号收尾（完整文字在点击放大的灯箱里显示）。
+     注意：text-overflow: ellipsis 只对块级/inline-block 盒子生效，
+     因此这两个元素必须显式设为 block —— 行内元素上写 ellipsis 是无效的，
+     文字会被直接裁断、看不到省略号。 */
+  .shot figcaption b,
+  .shot figcaption .desc {
+    display: block; max-width: 100%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .shot .tagrow { margin-bottom: 5px; }
+  .shot .tagrow span {
+    display: inline-block; font-size: 11.5px; padding: 2px 9px; border-radius: 99px;
+    background: var(--brand-soft); color: var(--brand-dark);
+  }
+  .shot .tagrow span.admin { background: #f1ebff; color: #6d28d9; }
+  .shot .tagrow span.mobile { background: var(--warn-soft); color: #b45309; }
+  .shot[hidden] { display: none; }
+  @media (max-width: 560px) {
+    .shot img { height: 178px; }
+  }
+
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(9,15,26,.93); z-index: 90;
+    display: flex; align-items: center; justify-content: center; padding: 26px;
+  }
+  .lightbox[hidden] { display: none; }
+  .lightbox img {
+    max-width: 100%; max-height: calc(100vh - 96px); border-radius: 10px;
+    object-fit: contain; background: #fff;
+    box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  }
+  .lightbox .cap {
+    position: absolute; left: 0; right: 0; bottom: 18px; text-align: center;
+    color: #cfe0f2; font-size: 14px;
+  }
+  .lightbox .close {
+    position: absolute; top: 18px; right: 22px; background: rgba(255,255,255,.14);
+    border: 1px solid rgba(255,255,255,.3); color: #fff; border-radius: 9px;
+    padding: 7px 14px; cursor: pointer; font: inherit;
+  }
+
+  /* ------------------------------ 项目结构 ------------------------------ */
+  .filetree {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 16px 20px; box-shadow: var(--shadow);
+    font-family: Consolas, "SFMono-Regular", monospace; font-size: 13px; line-height: 1.95;
+  }
+  .filetree ul { list-style: none; margin: 0; padding-left: 18px; }
+  .filetree > ul { padding-left: 0; }
+  .filetree > ul > li { border-top: 1px dashed var(--line); padding-top: 7px; margin-top: 7px; }
+  .filetree > ul > li:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+  /* 每层用左侧色条表示归属：一级蓝、二级灰，缩进即层级 */
+  .filetree ul ul { border-left: 2px solid #e6ebf2; margin-left: 3px; }
+  .filetree > ul > li > ul { border-left-color: #d3ddf0; }
+  .filetree li > .node { display: block; padding: 0.5px 0; }
+  .filetree .dir { color: var(--brand-dark); font-weight: 700; }
+  .filetree .file { color: var(--ink); }
+  .filetree .desc { color: var(--ink-3); margin-left: 8px; }
+  .filetree li > .node:hover { background: #f8fafd; }
+  .checks { display: grid; gap: 9px; }
+  .check {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  }
+  .check .tick { color: var(--ok); font-weight: 700; }
+  .check .body { font-size: 14px; }
+  .check .body .cmd { font-family: Consolas, monospace; font-size: 12.5px; color: var(--ink-3); }
+  .note {
+    background: var(--warn-soft); border: 1px solid #f3d9ab; color: #8a5209;
+    border-radius: 10px; padding: 13px 16px; font-size: 13.5px;
+  }
+  .note.info { background: var(--brand-soft); border-color: #c7d9ff; color: #1f3f7a; }
+  footer { padding: 34px 0 46px; color: var(--ink-3); font-size: 13.5px; text-align: center; }
+  .anchor { scroll-margin-top: 18px; }
+  @media (max-width: 720px) {
+    header h1 { font-size: 28px; }
+    section { padding: 40px 0; }
+    h2 { font-size: 21px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <span class="eyebrow">毕业设计 · 全栈实现</span>
+    <h1>高校实验室设备预约与共享管理系统</h1>
+    <p class="sub">
+      把「这台设备现在能不能约」拆解为 <b>12 条可解释的规则</b>，用<b>区间代数</b>推导可用时段，
+      用<b>写锁 + BEGIN IMMEDIATE + 事务内二次校验</b>保证并发抢同一时段不会产生双重预约，
+      并把预约、审批、签到、违约、信用、利用率统计做成一条完整闭环。
+    </p>
+    <div class="badges">
+      <span class="badge">Node.js 22.5+ / 24</span>
+      <span class="badge">SQLite（WAL）</span>
+      <span class="badge">零第三方依赖</span>
+      <span class="badge">76 个 REST 接口</span>
+      <span class="badge">14 张数据表</span>
+      <span class="badge">20 个前端页面</span>
+      <span class="badge ok">自动化测试 <b>46/46</b></span>
+      <span class="badge ok">HTTP 冒烟 <b>46/46</b></span>
+      <span class="badge ok">前端渲染 <b>30/30</b></span>
+    </div>
+    <div class="cta">
+      <a class="btn btn-primary" href="#screens">↓ 查看系统界面</a>
+      <a class="btn btn-ghost" href="#start">本地运行方式</a>
+      <a class="btn btn-ghost" href="#rules">冲突规则引擎</a>
+      <a class="btn btn-ghost" href="https://github.com/KyoukaAlice/lab-equipment-booking">GitHub 仓库</a>
+    </div>
+
+    <figure class="hero-shot">
+      <img src="images/admin-overview.png" alt="管理概览：设备利用率排行、实验室对比、时段热力图">
+      <figcaption>管理概览页：设备利用率排行、实验室资源对比、星期×小时使用热力图、失信关注名单</figcaption>
+    </figure>
+  </div>
+</header>
+
+<!-- ============================ 痛点与做法 ============================ -->
+<section class="anchor" id="why">
+  <div class="wrap">
+    <h2><span class="num">01</span>它解决什么问题</h2>
+    <p class="lead">高校贵重仪器（示波器、GPU 服务器、3D 打印机…）的共享存在四个典型痛点，本系统逐条给出工程解法。</p>
+    <div class="grid g4">
+      <div class="card">
+        <h3><span class="ico">⚠</span>时段靠"接龙"占位</h3>
+        <p>纸质登记本/微信群无法判断冲突，常出现两人同抢一台设备。<br><b>解法：</b>R01~R12 规则引擎 + 区间重叠检测，冲突时返回冲突时段与占用者。</p>
+      </div>
+      <div class="card">
+        <h3><span class="ico">🕒</span>约了不来，时段空转</h3>
+        <p>预约成功却不到场，黄金时段被浪费。<br><b>解法：</b>6 位签到码 + 签到时间窗；超期未签到由后台作业判定爽约、扣信用分并释放时段。</p>
+      </div>
+      <div class="card">
+        <h3><span class="ico">🔧</span>维修/教学与预约撞车</h3>
+        <p>计量校准、假期封闭、厂家维护等不可用时段没有纳入统一约束。<br><b>解法：</b>停机计划作为区间差集的减项参与校验（R09），创建时自动通知受影响预约人。</p>
+      </div>
+      <div class="card">
+        <h3><span class="ico">📊</span>没有可信的利用率数据</h3>
+        <p>无法回答"哪台设备闲置、哪个时段是高峰"。<br><b>解法：</b>利用率以真实排班开放时长为分母推导，配套热力图、趋势、履约率与 CSV 导出。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 核心能力 ============================ -->
+<section class="anchor" id="features">
+  <div class="wrap">
+    <h2><span class="num">02</span>核心能力</h2>
+    <p class="lead">三类角色各自看到该看的：学生预约使用、教师审批、管理员掌握全局。</p>
+    <div class="grid g3">
+      <div class="card">
+        <h3><span class="ico">🎓</span>学生 / 教师</h3>
+        <ul>
+          <li>设备目录：按实验室、类别、状态、关键字检索，显示今日/本周剩余空闲</li>
+          <li>可视化选时段：一周时间轴，15 分钟吸附，空闲/待审批/已通过/使用中/停机分色</li>
+          <li>提交预约：R01~R12 全量校验，失败给出可执行提示（如引导加入候补）</li>
+          <li>现场签到（6 位码 + 时间窗）与签退（记录实际使用时长）</li>
+          <li>候补队列：时段释放后自动补位 + 限时确认，超时自动顺延</li>
+          <li>信用分台账、违约记录、本周额度；到期未签退自动记超时违约</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="ico">✅</span>实验室负责人</h3>
+        <ul>
+          <li>审批中心：只能审批所辖实验室/设备的预约，且不得审批自己的预约</li>
+          <li>批量通过 / 批量驳回（驳回必须填写原因）</li>
+          <li>审批通过自动生成签到码并通知申请人</li>
+          <li>查看本实验室范围的利用率、热力图、趋势与用户履约排名</li>
+          <li>登记违约（设备损坏、违规使用）与撤销误判并返还信用分</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="ico">⚙️</span>管理员</h3>
+        <ul>
+          <li>实验室 / 设备 / 每周排班（含设备级例外排班）/ 停机计划的全量维护</li>
+          <li>用户与权限：角色、周额度、负责实验室、冻结解冻、停用、重置口令</li>
+          <li>23 项业务规则在线配置（签到宽限、扣分标准、信用阈值…），改完即生效</li>
+          <li>审计日志：谁在何时对什么对象做了什么</li>
+          <li>运行状态：数据规模、WAL 日志模式、后台作业累计处理量</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 规则引擎 ============================ -->
+<section class="anchor" id="rules">
+  <div class="wrap">
+    <h2><span class="num">03</span>冲突规则引擎：把"能不能约"讲清楚</h2>
+    <p class="lead">
+      预约校验被拆成 12 条独立规则，按「零成本校验 → 时间窗校验 → 需要查库的区间与额度校验」的顺序短路返回，
+      每条失败都带机器可读的规则码与中文说明，前端据此做差异化引导。
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>规则</th><th>判定内容</th><th>失败时的用户提示要点</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="rid">R01</span></td><td>设备存在且状态为「可预约」</td><td>告知设备当前状态（维护中／已停用）</td></tr>
+          <tr><td><span class="rid">R02</span></td><td>所属实验室处于开放状态</td><td>告知实验室已停用</td></tr>
+          <tr><td><span class="rid">R03</span></td><td>起止时间为合法数值且 start &lt; end</td><td>时间格式或逻辑错误</td></tr>
+          <tr><td><span class="rid">R04</span></td><td>起点不早于当前时刻</td><td>不可预约已过去的时间</td></tr>
+          <tr><td><span class="rid">R05</span></td><td>满足最小提前预约分钟数</td><td>告知需提前多少分钟</td></tr>
+          <tr><td><span class="rid">R06</span></td><td>不超过最大提前预约天数</td><td>告知最多可提前几天</td></tr>
+          <tr><td><span class="rid">R07</span></td><td>时长在设备 <code>min_minutes ~ max_minutes</code> 内</td><td>告知该设备的时长上下限</td></tr>
+          <tr><td><span class="rid">R08</span></td><td>请求区间被某一段开放排班<b>完整覆盖</b></td><td>告知所选时段不在开放时间内</td></tr>
+          <tr><td><span class="rid">R09</span></td><td>不与停机／校准／封闭计划重叠</td><td>返回停机原因、类型与起止时间</td></tr>
+          <tr><td><span class="rid core">R10</span></td><td>该设备该时段无其它占用（区间重叠检测）</td><td>返回冲突时段、状态与占用者，并<b>引导加入候补</b></td></tr>
+          <tr><td><span class="rid core">R11</span></td><td>不与本人其它预约重叠</td><td>返回本人冲突预约的设备与时段</td></tr>
+          <tr><td><span class="rid core">R12</span></td><td>账号状态正常、在途数量未超上限、周额度充足</td><td>返回已用额度与额度上限等明细</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid g2" style="margin-top:18px">
+      <div class="card">
+        <h3><span class="ico">📐</span>区间代数（左闭右开）</h3>
+        <p>所有时间区间为 <code>[start, end)</code>：<code>09:00-10:00</code> 与 <code>10:00-11:00</code> 相邻但不冲突，符合真实排期习惯。</p>
+        <pre style="margin-top:12px"><span class="c">// 冲突判定</span>
+overlaps(A, B) ⇔ A.start &lt; B.end ∧ B.start &lt; A.end
+
+<span class="c">// 可用时段 = 排班 −（占用 ∪ 停机）</span>
+Free(v, day) = Schedule(v, day)
+             − Bookings(v) − Blackouts(v)</pre>
+      </div>
+      <div class="card">
+        <h3><span class="ico">🔒</span>并发唯一性（20 并发只允许 1 单）</h3>
+        <p>写操作统一走 <code>writeTx()</code>：进程内互斥锁串行化，<code>BEGIN IMMEDIATE</code> 立即取写锁，
+        并在事务内<b>重新跑一遍完整校验</b>后才插入，彻底消除「先查后写」的竞态窗口。</p>
+        <pre style="margin-top:12px">await acquireWriteLock()   <span class="c"># 进程内互斥</span>
+BEGIN IMMEDIATE            <span class="c"># 立即取得写锁</span>
+  validateBookingRequest() <span class="c"># 事务内二次校验</span>
+  INSERT INTO bookings ...
+COMMIT</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 架构 ============================ -->
+<section class="anchor" id="arch">
+  <div class="wrap">
+    <h2><span class="num">04</span>技术架构</h2>
+    <p class="lead">五层结构，上层可依赖下层、下层不反向依赖；<b>运行时零第三方依赖</b>，无需 <code>npm install</code>。</p>
+    <div class="grid g2">
+      <div class="card">
+        <h3><span class="ico">🧱</span>分层与职责</h3>
+        <ul class="layers" style="margin-top:12px">
+          <li><i class="ly">public/ 前端</i><span>无构建 SPA：api · ui · pages-core · pages-admin · app</span></li>
+          <li><i class="ly">http/ 传输层</i><span>请求解析 · Bearer/Cookie 鉴权 · 静态资源 · SPA 回退 · 统一错误</span></li>
+          <li><i class="ly">routes/ 路由层</i><span>auth · lab · device · booking · notification · stats · admin（76 个端点）</span></li>
+          <li><i class="ly">services/ 业务层</i><span>booking · availability · credit · stats · notification · audit · scheduler · presenters</span></li>
+          <li><i class="ly">core/ 规则层</i><span>interval（区间代数）· conflict-rules（R01~R12）· booking-rules（状态机）· config</span></li>
+          <li><i class="ly">db/ 数据层</i><span>DatabaseSync · WAL · 写锁 · writeTx / readTx · schema.sql（14 张表）</span></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="ico">🛠</span>技术选型与理由</h3>
+        <ul>
+          <li><b>数据库 SQLite（WAL）</b>：单机部署零运维，读写不互斥、写写串行，配合写锁即可保证正确性</li>
+          <li><b>Web 服务用内置 <code>node:http</code></b>：手写极简路由器（支持路径参数、区分 404/405），无框架依赖</li>
+          <li><b>口令 <code>crypto.scrypt</code></b>（N=16384, r=8, p=1）加盐散列 + <code>timingSafeEqual</code> 校验</li>
+          <li><b>前端零构建</b>：原生 ES Module + 手写 CSS，图表（柱状/环形/热力图）均由 DOM+CSS 实现</li>
+          <li><b>后台作业</b>：每 60 秒一轮，处理爽约判定、开始前提醒、候补超时顺延、冻结到期自动解冻</li>
+          <li><b>测试框架自研</b>：单进程串行执行，避免受限环境下 fork 子进程失败</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 界面截图 ============================ -->
+<section class="anchor" id="screens">
+  <div class="wrap">
+    <h2><span class="num">05</span>系统界面</h2>
+    <p class="lead">
+      以下均为本系统<b>实际运行时的界面</b>（非设计稿、非示意图），数据来自内置演示数据集。
+      点击任意图片可放大查看原图。
+    </p>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-role="all">全部</button>
+      <button class="tab" data-role="student">学生 / 教师</button>
+      <button class="tab" data-role="admin">管理员</button>
+      <button class="tab" data-role="mobile">移动端</button>
+    </div>
+    <div class="shots" id="shots"></div>
+  </div>
+</section>
+
+<!-- ============================ 测试验证 ============================ -->
+<section class="anchor" id="tests">
+  <div class="wrap">
+    <h2><span class="num">06</span>测试与验证</h2>
+    <p class="lead">四层可执行验证，全部通过；测试使用内存数据库，不影响演示数据。</p>
+    <div class="grid g4" style="margin-bottom:20px">
+      <div class="stat ok"><div class="v">46 / 46</div><div class="l">自动化测试用例（约 0.45s）</div></div>
+      <div class="stat ok"><div class="v">46 / 46</div><div class="l">HTTP 端到端冒烟测试</div></div>
+      <div class="stat ok"><div class="v">33 / 33</div><div class="l">演示数据业务不变量自检</div></div>
+      <div class="stat ok"><div class="v">30 / 30</div><div class="l">前端页面渲染验证（20 页）</div></div>
+    </div>
+    <div class="checks">
+      <div class="check"><span class="tick">✓</span><div class="body">
+        <b>算法与规则单元测试（26 个用例）</b><br>
+        左闭右开语义下的相邻/包含/重叠判定、区间合并与差集、最短碎片过滤；R01~R12 逐条失败与通过、冲突明细、设备级排班优先。
+        <div class="cmd">node test/run.js interval,conflict-rules</div>
+      </div></div>
+      <div class="check"><span class="tick">✓</span><div class="body">
+        <b>业务流程与并发集成测试（20 个用例）</b><br>
+        提交 → 审批 → 签到 → 签退闭环、驳回释放时段、临近取消记违约、超时与爽约自动扣分、信用冻结与解冻、候补补位与超时顺延、
+        <b>20 并发抢同一时段只有 1 条成功</b>、状态机非法迁移拦截、数据可见范围、CSV 导出。
+        <div class="cmd">node test/run.js booking</div>
+      </div></div>
+      <div class="check"><span class="tick">✓</span><div class="body">
+        <b>演示数据不变量自检（33 项）</b><br>
+        同一设备占用时段零重叠、信用台账累加恒等于当前分数、无用户触及在途上限、被冻结用户无未来预约、已完成预约必有签退信息、无自审自批。
+        <div class="cmd">node scripts/check-seed.js</div>
+      </div></div>
+      <div class="check"><span class="tick">✓</span><div class="body">
+        <b>HTTP 冒烟与前端渲染验证</b><br>
+        登录与越权边界（401/403）、设备与可用时段、完整预约闭环、管理端 CRUD、后台作业、SPA 回退；前端用 DOM 桩真实渲染全部 20 个页面。
+        <div class="cmd">node scripts/smoke.js ｜ node scripts/verify-frontend.js</div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 快速开始 ============================ -->
+<section class="anchor" id="start">
+  <div class="wrap">
+    <h2><span class="num">07</span>本地运行</h2>
+    <p class="lead">只要 Node.js ≥ 22.5（数据库使用内置 <code>node:sqlite</code>），无需安装任何依赖。</p>
+    <div class="grid g2">
+      <div class="card">
+        <h3><span class="ico">▶</span>启动</h3>
+        <pre><span class="c"># 1) 克隆</span>
+git clone https://github.com/KyoukaAlice/lab-equipment-booking.git
+cd lab-equipment-booking
+
+<span class="c"># 2) 启动（首次启动自动建库并生成演示数据）</span>
+npm start
+<span class="c"># 或 Windows 双击：scripts\start.bat</span>
+
+<span class="c"># 3) 打开浏览器</span>
+<span class="s">http://127.0.0.1:3000</span></pre>
+      </div>
+      <div class="card">
+        <h3><span class="ico">👤</span>演示账号（口令统一 <code>123456</code>）</h3>
+        <div class="table-wrap" style="box-shadow:none">
+          <table>
+            <thead><tr><th>账号</th><th>角色与用途</th></tr></thead>
+            <tbody>
+              <tr><td><code>admin</code></td><td>管理员，全部权限</td></tr>
+              <tr><td><code>teacher</code></td><td>实验室负责人，可审批预约</td></tr>
+              <tr><td><code>teacher2</code> / <code>teacher3</code></td><td>其它实验室负责人</td></tr>
+              <tr><td><code>student</code> ~ <code>student11</code></td><td>学生；<code>student5</code> 信用分 55 已被自动冻结，用于演示失信限制</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="note info" style="margin-top:16px">
+      <b>演示数据规模：</b>15 个用户 · 4 间实验室 · 20 台设备 · 60 条每周排班 · 8 条停机计划 · 约 700 条预约（跨越过去 75 天到未来 14 天，其中过去 30 天按真实使用密度填密，设备利用率约 19%） · 5 条候补 · 11 条违约记录。
+      需要重置时执行 <code>npm run reset</code> 或双击 <code>scripts\reset-data.bat</code>。
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 项目结构 ============================ -->
+<section class="anchor" id="layout">
+  <div class="wrap">
+    <h2><span class="num">08</span>项目结构</h2>
+    <div class="filetree">
+      <ul>
+        <li><span class="node"><span class="dir">src/</span><span class="desc">后端（约 8.8 千行）</span></span>
+          <ul>
+            <li><span class="node"><span class="file">server.js</span><span class="desc">程序入口：启动服务、打印横幅、优雅关闭（读 PORT / LAB_DB_PATH）</span></span></li>
+            <li><span class="node"><span class="dir">core/</span><span class="desc">领域规则层（不依赖 HTTP）</span></span>
+              <ul>
+                <li><span class="node"><span class="file">interval.js</span><span class="desc">区间代数：overlaps / merge / clip / subtract / findFreeSlots</span></span></li>
+                <li><span class="node"><span class="file">conflict-rules.js</span><span class="desc">冲突规则引擎 R01~R12 + 排班推导 + 占用区间收集</span></span></li>
+                <li><span class="node"><span class="file">booking-rules.js</span><span class="desc">预约状态机、审批/取消权限、违约类型与分值</span></span></li>
+                <li><span class="node"><span class="file">config.js</span><span class="desc">23 项业务配置：默认值、缓存读取、在线更新 + 审计</span></span></li>
+                <li><span class="node"><span class="file">password.js</span><span class="desc">scrypt 口令散列、6 位签到码、会话令牌生成</span></span></li>
+              </ul>
+            </li>
+            <li><span class="node"><span class="dir">db/</span><span class="desc">数据访问层</span></span>
+              <ul>
+                <li><span class="node"><span class="file">index.js</span><span class="desc">连接与 WAL、查询封装、写锁 + BEGIN IMMEDIATE 写事务</span></span></li>
+                <li><span class="node"><span class="file">schema.sql</span><span class="desc">14 张表与索引（毫秒时间戳、金额存「分」、CHECK/外键约束）</span></span></li>
+              </ul>
+            </li>
+            <li><span class="node"><span class="dir">http/</span><span class="desc">传输层：node:http 服务器</span></span>
+              <ul>
+                <li><span class="node"><span class="file">server.js</span><span class="desc">请求解析 / 鉴权 / 路由分发 / 统一错误 / 静态资源与 SPA 回退</span></span></li>
+                <li><span class="node"><span class="file">router.js</span><span class="desc">极简路由器：路径参数 :id、区分 404 与 405</span></span></li>
+                <li><span class="node"><span class="file">helpers.js</span><span class="desc">统一响应体、登录/角色守卫、分页与入参读取</span></span></li>
+              </ul>
+            </li>
+            <li><span class="node"><span class="dir">routes/</span><span class="desc">76 个 REST 端点</span></span>
+              <ul>
+                <li><span class="node"><span class="file">auth / lab / device</span><span class="desc">认证与个人中心、实验室、设备与可用时段</span></span></li>
+                <li><span class="node"><span class="file">booking / notification</span><span class="desc">预约全流程与候补、通知中心</span></span></li>
+                <li><span class="node"><span class="file">stats / admin</span><span class="desc">统计报表与 CSV、管理端全量维护与审计</span></span></li>
+              </ul>
+            </li>
+            <li><span class="node"><span class="dir">services/</span><span class="desc">业务服务层</span></span>
+              <ul>
+                <li><span class="node"><span class="file">booking.service.js</span><span class="desc">创建/审批/取消/签到/签退/爽约/候补补位/导出（并发安全）</span></span></li>
+                <li><span class="node"><span class="file">availability.service.js</span><span class="desc">可用时段 =（排班 − 占用 − 停机）与多设备共同空闲</span></span></li>
+                <li><span class="node"><span class="file">credit.service.js</span><span class="desc">信用分唯一写入口：违约扣分、台账、自动冻结与解冻</span></span></li>
+                <li><span class="node"><span class="file">stats.service.js</span><span class="desc">利用率、实验室对比、热力图、趋势、履约率、时间构成</span></span></li>
+                <li><span class="node"><span class="file">scheduler.service.js</span><span class="desc">后台作业：每 60 秒一轮（爽约/提醒/候补超时/解冻）</span></span></li>
+                <li><span class="node"><span class="file">presenters.js · notification / audit</span><span class="desc">出参组装与脱敏、站内通知、审计日志</span></span></li>
+              </ul>
+            </li>
+            <li><span class="node"><span class="dir">seed/seed-data.js</span><span class="desc">确定性演示数据生成器（构造性保证零重叠、台账可对账）</span></span></li>
+            <li><span class="node"><span class="dir">utils/</span><span class="desc">时间（毫秒 + 时区偏移）、统一错误类型、入参校验</span></span></li>
+          </ul>
+        </li>
+        <li><span class="node"><span class="dir">public/</span><span class="desc">前端 SPA（无构建，约 4.5 千行）</span></span>
+          <ul>
+            <li><span class="node"><span class="file">index.html · css/style.css</span><span class="desc">页面骨架与手写样式（含时间轴、热力图、环形图）</span></span></li>
+            <li><span class="node"><span class="file">js/app.js</span><span class="desc">会话、hash 路由（21 条）、导航、通知徽标、全局错误提示</span></span></li>
+            <li><span class="node"><span class="file">js/pages-core.js</span><span class="desc">学生/教师端 8 个页面（含时间轴选时段、审批中心）</span></span></li>
+            <li><span class="node"><span class="file">js/pages-admin.js</span><span class="desc">管理端 10 个页面（概览/设备/排班/用户/违约/报表/审计…）</span></span></li>
+            <li><span class="node"><span class="file">js/api.js · js/ui.js</span><span class="desc">接口客户端（Bearer 鉴权、错误码翻译）与通用组件库</span></span></li>
+          </ul>
+        </li>
+        <li><span class="node"><span class="dir">test/</span><span class="desc">46 个自动化用例（内存数据库，不影响演示数据）</span></span>
+          <ul>
+            <li><span class="node"><span class="file">interval.test.js</span><span class="desc">区间算法 9 个用例</span></span></li>
+            <li><span class="node"><span class="file">conflict-rules.test.js</span><span class="desc">R01~R12 规则 17 个用例</span></span></li>
+            <li><span class="node"><span class="file">booking-flow.test.js</span><span class="desc">业务流程与并发唯一性 20 个用例</span></span></li>
+            <li><span class="node"><span class="file">run.js · runner.js · helpers.js</span><span class="desc">自研零依赖测试运行器与测试辅助</span></span></li>
+          </ul>
+        </li>
+        <li><span class="node"><span class="dir">scripts/</span><span class="desc">启动、验证与发布辅助</span></span>
+          <ul>
+            <li><span class="node"><span class="file">start.bat · stop.bat · reset-data.bat</span><span class="desc">一键启动 / 关闭残留服务 / 重置演示数据</span></span></li>
+            <li><span class="node"><span class="file">preflight.js</span><span class="desc">启动自检：Node 版本、node:sqlite、端口占用、文件完整性</span></span></li>
+            <li><span class="node"><span class="file">smoke.js · check-seed.js · verify-frontend.js</span><span class="desc">HTTP 冒烟 46 项 / 数据自检 33 项 / 前端渲染 30 项</span></span></li>
+            <li><span class="node"><span class="file">capture-screenshots.js · preview-pages.js</span><span class="desc">生成介绍页配图 / 本地预览介绍页</span></span></li>
+          </ul>
+        </li>
+        <li><span class="node"><span class="dir">docs/</span><span class="desc">GitHub Pages 项目介绍页与界面截图</span></span></li>
+        <li><span class="node"><span class="file">README.md · LICENSE · package.json</span><span class="desc">完整文档（接口清单/R01~R12/配置项/FAQ）、MIT 许可、零依赖说明</span></span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>
+      高校实验室设备预约与共享管理系统 · Node.js + SQLite · 零第三方依赖
+      ｜ <a href="https://github.com/KyoukaAlice/lab-equipment-booking">GitHub 仓库</a>
+      ｜ <a href="https://github.com/KyoukaAlice/lab-equipment-booking#readme">README 完整文档</a>
+    </p>
+    <p>界面均为系统实际运行时的样子；演示数据由内置生成器构造，不含任何真实个人信息。</p>
+  </div>
+</footer>
+
+<div class="lightbox" id="lightbox" hidden>
+  <button class="close" id="lb-close">关闭 ✕</button>
+  <img id="lb-img" src="" alt="">
+  <div class="cap" id="lb-cap"></div>
+</div>
+
+<script>
+/* ------------------------------------------------------------------
+   界面图库：清单里的文件名与 docs/images/ 下的图片一一对应
+   ------------------------------------------------------------------ */
+const ROLE_LABEL = { student: '学生 / 教师', admin: '管理员', mobile: '移动端' };
+const SHOTS = [
+  { f: 'login.png',            r: 'student', t: '登录页',            d: '演示账号一键填入，可直接切换三种角色体验' },
+  { f: 'dashboard-student.png',r: 'student', t: '学生工作台',        d: '在途预约、待签到、即将开始与可约设备推荐' },
+  { f: 'devices.png',          r: 'student', t: '设备目录',          d: '按实验室/类别/状态检索，显示今日剩余空闲与审批方式' },
+  { f: 'device-timeline.png',  r: 'student', t: '设备详情 · 时间轴选时段', d: '一周时间轴、15 分钟吸附，五种状态分色显示' },
+  { f: 'bookings.png',         r: 'student', t: '我的预约',          d: '在途/历史筛选、状态流转、一键导出 CSV' },
+  { f: 'waitlist.png',         r: 'student', t: '候补队列',          d: '排队位次与限时确认补位，超时自动顺延' },
+  { f: 'profile.png',          r: 'student', t: '个人中心',          d: '信用分变动台账、违约记录与本周额度' },
+  { f: 'review.png',           r: 'student', t: '审批中心（教师）',  d: '待我审批与使用中待办，支持批量通过/驳回' },
+  { f: 'admin-schedule.png',   r: 'admin',   t: '排班与停机',        d: '实验室默认排班 + 设备级例外排班 + 停机计划' },
+  { f: 'admin-devices.png',    r: 'admin',   t: '设备管理',          d: '资产台账、免审批/签到/时长策略与影响提示' },
+  { f: 'admin-blacklist.png',  r: 'admin',   t: '违约与信用',        d: '五类违约统计、手工登记与撤销返还信用分' },
+  { f: 'admin-reports.png',    r: 'admin',   t: '统计报表',          d: '利用率明细、预约趋势、履约率与 CSV 导出' },
+  { f: 'admin-audit.png',      r: 'admin',   t: '审计日志',          d: '谁在何时对什么对象做了什么，可按动作筛选' },
+  { f: 'admin-system.png',     r: 'admin',   t: '运行状态',          d: '数据规模、WAL 日志模式与后台作业统计' },
+  { f: 'mobile-device.png',    r: 'mobile',  t: '移动端视图',        d: '390×844 单列自适应布局，关键操作单手可达' },
+];
+
+const shotsRoot = document.getElementById('shots');
+for (const s of SHOTS) {
+  const fig = document.createElement('figure');
+  fig.className = 'shot';
+  fig.dataset.role = s.r;
+  const tagCls = s.r === 'admin' ? 'admin' : s.r === 'mobile' ? 'mobile' : '';
+  fig.innerHTML =
+    '<img loading="lazy" src="images/' + s.f + '" alt="' + s.t + '">' +
+    '<figcaption>' +
+      '<div class="tagrow"><span class="' + tagCls + '">' + ROLE_LABEL[s.r] + '</span></div>' +
+      '<b>' + s.t + '</b><span class="desc">' + s.d + '</span>' +
+    '</figcaption>';
+  fig.addEventListener('click', () => openLightbox(s));
+  shotsRoot.appendChild(fig);
+}
+
+/* 分类切换 */
+const tabs = document.getElementById('tabs');
+tabs.addEventListener('click', (e) => {
+  const btn = e.target.closest('.tab');
+  if (!btn) return;
+  for (const t of tabs.querySelectorAll('.tab')) t.classList.toggle('active', t === btn);
+  const role = btn.dataset.role;
+  for (const fig of shotsRoot.querySelectorAll('.shot')) {
+    fig.hidden = !(role === 'all' || fig.dataset.role === role);
+  }
+});
+
+/* 图片放大 */
+const lb = document.getElementById('lightbox');
+const lbImg = document.getElementById('lb-img');
+const lbCap = document.getElementById('lb-cap');
+function openLightbox(s) {
+  lbImg.src = 'images/' + s.f;
+  lbImg.alt = s.t;
+  lbCap.textContent = s.t + ' —— ' + s.d;
+  lb.hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+function closeLightbox() {
+  lb.hidden = true;
+  lbImg.src = '';
+  document.body.style.overflow = '';
+}
+lb.addEventListener('click', (e) => { if (e.target !== lbImg) closeLightbox(); });
+document.getElementById('lb-close').addEventListener('click', closeLightbox);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !lb.hidden) closeLightbox(); });
+</script>
+</body>
+</html>
